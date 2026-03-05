@@ -1,0 +1,29 @@
+# 爬虫基础配置
+base_url: "https://ygp.gdzwfw.gov.cn/#/44/jygg"
+output_prefix: "tender_data"
+
+# 抓取页数控制
+max_pages: 50
+
+# 筛选条件
+target_project_types:
+  - "房屋建筑"
+  - "市政"
+
+target_notice_key: "招标公告与资格预审公告"
+
+# 黑名单（标题包含这些词则跳过）
+blacklist_titles:
+  - "答疑"
+  - "结果"
+
+# 是否只抓取当天发布的内容 (true/false)
+only_today: true
+
+#飞书配置
+feishu:
+  enable: true
+  app_id: "${FS_APP_ID}"     # 占位符
+  app_secret: "${FS_APP_SECRET}"
+  app_token: "${FS_APP_TOKEN}"
+  table_id: "${FS_TABLE_ID}"
