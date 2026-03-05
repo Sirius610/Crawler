@@ -39,6 +39,47 @@ class FeishuClient:
             print(f"  [!] 飞书请求异常: {e}")
             return False
 
+    
+    def get_existing_titles(self):
+        """从飞书表格中读取已经存在的标题（用标题作为去重标准）"""
+        if not self.token and not self.get_tenant_access_token():
+            return set()
+
+        url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{self.app_token}/tables/{self.table_id}/records/search"
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json; charset=utf-8"
+        }
+        
+        existing_titles = set()
+        has_more = True
+        page_token = ""
+
+        print("  [Feishu] 正在读取线上表格，建立防重防线...")
+        while has_more:
+            # 每次拉取 500 条数据的“标题”字段
+            payload = {"field_names": ["标题"], "page_size": 500}
+            if page_token: payload["page_token"] = page_token
+            
+            try:
+                resp = requests.post(url, headers=headers, json=payload).json()
+                if resp.get("code") == 0:
+                    data = resp.get("data", {})
+                    for item in data.get("items", []):
+                        title = item.get("fields", {}).get("标题")
+                        if title: existing_titles.add(title)
+                    
+                    has_more = data.get("has_more", False)
+                    page_token = data.get("page_token", "")
+                else:
+                    break
+            except Exception as e:
+                print(f"  [Feishu] 读取历史记录失败: {e}")
+                break
+                
+        print(f"  [Feishu] 线上防重建立完毕，发现 {len(existing_titles)} 条历史记录。")
+        return existing_titles
+
     def add_records(self, records):
         """批量写入数据到多维表格"""
         if not self.token and not self.get_tenant_access_token():
@@ -98,6 +139,9 @@ class AdvancedTenderScraper:
         self.feishu = None
         if config.get('feishu', {}).get('enable'):
             self.feishu = FeishuClient(config['feishu'])
+        self.seen_titles = set()
+        if self.feishu:
+            self.seen_titles = self.feishu.get_existing_titles()
 
     def load_history(self):
         if os.path.exists(self.history_file):
@@ -172,17 +216,17 @@ class AdvancedTenderScraper:
                 # 【透视眼日志】打印每一条抓取到的原始数据，方便排查过滤原因
                 print(f"  [透视] ID:{notice_id} | 日期:{date_short} | 类型:{p_type} | 公告:{n_desc} | 标题:{title[:15]}...")
 
-                if notice_id in self.seen_ids: continue
+                if title in self.seen_titles: 
+                    continue
+                    
                 if self.target_key not in n_desc: continue
                 if not any(k in p_type for k in self.target_types): continue
                 if any(bad in title for bad in self.blacklist): continue
-                
-                # 日期判断
-                if self.only_today and date_short != self.today_str: 
-                    continue
+                if self.only_today and date_short != self.today_str: continue
 
-                self.seen_ids.add(notice_id)
-                print(f"  [+] 成功命中: {date_short} | {title[:15]}...")
+                self.seen_titles.add(title) # 加进集合，防止同一批抓取里有重复
+                print(f"  [+] 成功命中新数据: {date_short} | {title[:15]}...")
+
 
                 targets.append({
                     "title": title,
