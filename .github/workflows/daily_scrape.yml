@@ -1,0 +1,73 @@
+name: Daily Tender Auto Scraper
+
+on:
+  # 1. 允许手动点击按钮触发（方便测试）
+  workflow_dispatch:
+  # 2. 定时触发：每天北京时间早上 8:00 (UTC 0:00)
+  schedule:
+    - cron: '0 0 * * *'
+    - cron: '0 1 * * *'
+    - cron: '0 2 * * *'
+    - cron: '0 3 * * *'
+    - cron: '0 4 * * *'
+    - cron: '0 5 * * *'
+    - cron: '0 7 * * *'
+    - cron: '0 8 * * *'
+    - cron: '0 9 * * *'
+    - cron: '0 11 * * *'
+
+jobs:
+  scrape_job:
+    runs-on: ubuntu-latest
+    
+    # 设置时区为北京时间，确保 datetime.now() 获取的是中国时间
+    env:
+      TZ: 'Asia/Shanghai'
+
+    steps:
+      # 第一步：拉取仓库代码
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 第二步：安装 Python 3.10
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      # 第三步：安装 Python 依赖
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      # 第四步：安装 Playwright 浏览器内核
+      - name: Install Playwright Browsers
+        run: |
+          playwright install chromium
+          playwright install-deps
+
+      # 第五步：运行爬虫脚本
+      - name: Run Scraper
+        env:
+          FS_APP_ID: ${{ secrets.FS_APP_ID }}
+          FS_APP_SECRET: ${{ secrets.FS_APP_SECRET }}
+          FS_APP_TOKEN: ${{ secrets.FS_APP_TOKEN }}
+          FS_TABLE_ID: ${{ secrets.FS_TABLE_ID }}
+        run: |
+          # 使用 sed 命令将 config.yaml 里的占位符替换为真实的环境变量
+          sed -i "s/\${FS_APP_ID}/$FS_APP_ID/g" config.yaml
+          sed -i "s/\${FS_APP_SECRET}/$FS_APP_SECRET/g" config.yaml
+          sed -i "s/\${FS_APP_TOKEN}/$FS_APP_TOKEN/g" config.yaml
+          sed -i "s/\${FS_TABLE_ID}/$FS_TABLE_ID/g" config.yaml
+
+          python main.py
+
+      # 第六步：上传 Excel 文件作为结果
+      # 只有当文件夹里有 xlsx 文件时才会上传
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tender-Data-${{ strategy.job-index }}
+          path: ./*.xlsx
+          retention-days: 14  # 文件保留 14 天
